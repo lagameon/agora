@@ -1,0 +1,44 @@
+{
+  "name": "agora-roundtable",
+  "version": "0.1.0",
+  "description": "Multi-agent roundtable discussion tool — multiple AI agents discuss a topic, then a synthesizer produces a final answer",
+  "type": "module",
+  "license": "MIT",
+  "author": "Jianwei Lou",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lagameon/agora.git"
+  },
+  "keywords": [
+    "ai",
+    "multi-agent",
+    "roundtable",
+    "discussion",
+    "mcp",
+    "llm",
+    "anthropic",
+    "openai",
+    "gemini",
+    "bun"
+  ],
+  "bin": {
+    "agora": "src/cli.ts"
+  },
+  "scripts": {
+    "start": "bun run src/cli.ts",
+    "mcp": "bun run src/mcp.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@google/generative-ai": "^0.24.0",
+    "@modelcontextprotocol/sdk": "^1.11.0",
+    "openai": "^4.82.0",
+    "yaml": "^2.7.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.7.0"
+  }
+}

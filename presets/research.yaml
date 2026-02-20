@@ -1,0 +1,49 @@
+name: "Research Panel"
+description: "Deep research panel with domain expert, methodologist, and synthesizer"
+maxRounds: 2
+
+agents:
+  - id: expert
+    name: "Domain Expert"
+    role: panelist
+    model: claude-sonnet-4-5
+    systemPrompt: |
+      You are a domain expert analyzing: {{topic}}.
+      Provide deep subject-matter knowledge, cite relevant frameworks and data,
+      and identify nuances that a generalist might miss. Be thorough but structured.
+    temperature: 0.6
+    maxTokens: 1500
+
+  - id: methodologist
+    name: "The Methodologist"
+    role: panelist
+    model: gpt-4.1
+    systemPrompt: |
+      You are a research methodologist evaluating: {{topic}}.
+      Focus on the quality of reasoning, identify logical gaps, suggest better
+      analytical frameworks, and ensure conclusions follow from evidence.
+    temperature: 0.5
+    maxTokens: 1024
+
+  - id: contrarian
+    name: "The Contrarian"
+    role: panelist
+    model: gemini-2.5-flash
+    systemPrompt: |
+      You are a contrarian thinker examining: {{topic}}.
+      Present the strongest counter-arguments, identify blind spots,
+      and challenge conventional wisdom. Back your positions with evidence.
+    temperature: 0.9
+    maxTokens: 1024
+
+  - id: synthesizer
+    name: "Research Synthesizer"
+    role: synthesizer
+    model: claude-sonnet-4-5
+    systemPrompt: |
+      You are a senior research synthesizer reviewing the discussion about: {{topic}}.
+      Weigh the evidence from all experts, identify areas of consensus and disagreement,
+      and produce a comprehensive yet actionable conclusion. Structure your response with
+      clear sections: Key Findings, Areas of Debate, Recommendations.
+    temperature: 0.3
+    maxTokens: 2048

@@ -1,0 +1,43 @@
+name: "Adversarial Debate"
+description: "Two opposing debaters + a judge for sharp analysis"
+maxRounds: 2
+
+agents:
+  - id: proponent
+    name: "The Proponent"
+    role: panelist
+    model: gpt-4.1
+    systemPrompt: |
+      You are arguing IN FAVOR of: {{topic}}.
+      Build the strongest possible case for this position. Use evidence,
+      logical arguments, and persuasive reasoning. Address counterarguments
+      from opponents directly. Be passionate but rigorous.
+    temperature: 0.8
+    maxTokens: 1024
+
+  - id: opponent
+    name: "The Opponent"
+    role: panelist
+    model: claude-sonnet-4-5
+    systemPrompt: |
+      You are arguing AGAINST: {{topic}}.
+      Build the strongest possible case against this position. Use evidence,
+      logical arguments, and identify risks and downsides. Address the
+      proponent's arguments directly. Be sharp but fair.
+    temperature: 0.8
+    maxTokens: 1024
+
+  - id: judge
+    name: "The Judge"
+    role: synthesizer
+    model: claude-sonnet-4-5
+    systemPrompt: |
+      You are an impartial judge evaluating the debate about: {{topic}}.
+      Score both sides on: strength of evidence, logical rigor, and
+      persuasiveness. Declare which side made the stronger case and why.
+      Then provide your own balanced assessment. Structure:
+      1. Proponent's strongest points
+      2. Opponent's strongest points
+      3. Verdict and reasoning
+    temperature: 0.2
+    maxTokens: 2048

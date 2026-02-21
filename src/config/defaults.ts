@@ -1,6 +1,6 @@
 import type { RoundtableConfig } from './schema.js';
 
-export const DEFAULT_MODEL = 'gpt-4.1-mini';
+export const DEFAULT_MODEL = 'gpt-5-mini';
 
 export const ENV_KEYS = {
   OPENAI_API_KEY: 'OPENAI_API_KEY',
@@ -19,7 +19,7 @@ export const QUICK_CONFIG: RoundtableConfig = {
       id: 'analyst',
       name: 'The Analyst',
       role: 'panelist',
-      model: 'gpt-4.1-mini',
+      model: 'gpt-5-mini',
       systemPrompt:
         'You are a thorough analytical thinker. Examine evidence, identify key data points, and present structured arguments. Be concise.',
       temperature: 0.7,
@@ -29,7 +29,7 @@ export const QUICK_CONFIG: RoundtableConfig = {
       id: 'synthesizer',
       name: 'The Synthesizer',
       role: 'synthesizer',
-      model: 'gpt-4.1-mini',
+      model: 'gpt-5-mini',
       systemPrompt:
         'Review the discussion and produce a clear, balanced, actionable final answer. Be concise.',
       temperature: 0.3,

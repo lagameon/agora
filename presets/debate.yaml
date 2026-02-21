@@ -6,7 +6,7 @@ agents:
   - id: proponent
     name: "The Proponent"
     role: panelist
-    model: gpt-4.1
+    model: gpt-5.2
     systemPrompt: |
       You are arguing IN FAVOR of: {{topic}}.
       Build the strongest possible case for this position. Use evidence,

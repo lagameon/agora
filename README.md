@@ -111,7 +111,17 @@ bun run src/cli.ts history --id <discussion_id>
 
 ## Custom Presets
 
-Create YAML files in `~/.agora/presets/` to define custom agent panels:
+Presets are loaded from three directories (highest priority first):
+
+| Priority | Directory | Scope |
+|----------|-----------|-------|
+| 1 | `./.agora/presets/` | Project-local (per-repo) |
+| 2 | `~/.agora/presets/` | User global (shared) |
+| 3 | `<agora>/presets/` | Built-in |
+
+Same-name presets are shadowed by higher priority. This lets each project override the global defaults.
+
+Create YAML files in `~/.agora/presets/` (global) or `.agora/presets/` in your project root (project-local):
 
 ```yaml
 name: "My Team"

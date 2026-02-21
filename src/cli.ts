@@ -145,7 +145,12 @@ async function main(): Promise<void> {
       } else {
         console.log('\nAvailable presets:\n');
         for (const p of presets) {
-          const badge = p.source === 'user' ? '\x1b[33m[user]\x1b[0m' : '\x1b[2m[builtin]\x1b[0m';
+          const badge =
+            p.source === 'project'
+              ? '\x1b[35m[project]\x1b[0m'
+              : p.source === 'user'
+                ? '\x1b[33m[user]\x1b[0m'
+                : '\x1b[2m[builtin]\x1b[0m';
           console.log(`  \x1b[1m${p.name}\x1b[0m ${badge}`);
           if (p.description) console.log(`    ${p.description}`);
         }

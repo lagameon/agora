@@ -3,21 +3,41 @@ import { join, basename } from 'path';
 import YAML from 'yaml';
 import { RoundtableConfigSchema, type RoundtableConfig } from './schema.js';
 
-/** Directories to search for presets, in priority order (user overrides builtin) */
+/**
+ * Directories to search for presets, in priority order (highest first):
+ * 1. Project-local: ./.agora/presets/  (cwd)
+ * 2. User global:   ~/.agora/presets/
+ * 3. Builtin:       <agora>/presets/
+ */
 function getPresetDirs(): string[] {
   const dirs: string[] = [];
+
+  // Project-local presets (highest priority)
+  const cwd = process.cwd();
+  dirs.push(join(cwd, '.agora', 'presets'));
+
+  // User global presets
   const home = process.env.HOME ?? process.env.USERPROFILE ?? '';
   if (home) {
     dirs.push(join(home, '.agora', 'presets'));
   }
-  // Builtin presets (relative to project root)
+
+  // Builtin presets (lowest priority)
   dirs.push(join(import.meta.dir, '..', '..', 'presets'));
   return dirs;
 }
 
+/** Determine the source label for a preset directory */
+function getSourceLabel(dir: string): string {
+  if (!dir.includes('.agora')) return 'builtin';
+  const cwd = process.cwd();
+  if (dir.startsWith(join(cwd, '.agora'))) return 'project';
+  return 'user';
+}
+
 /**
  * Load a preset by name from the preset directories.
- * Searches user dir first, then builtin dir.
+ * Searches project-local first, then user global, then builtin.
  */
 export function loadPreset(name: string): RoundtableConfig {
   for (const dir of getPresetDirs()) {
@@ -33,7 +53,8 @@ export function loadPreset(name: string): RoundtableConfig {
 
 /**
  * List all available presets from all directories.
- * Returns name + description + source path.
+ * Returns name + description + source (project / user / builtin).
+ * Higher-priority presets shadow lower-priority ones with the same name.
  */
 export function listPresets(): Array<{ name: string; description?: string; source: string }> {
   const seen = new Set<string>();
@@ -42,6 +63,8 @@ export function listPresets(): Array<{ name: string; description?: string; sourc
   for (const dir of getPresetDirs()) {
     if (!existsSync(dir)) continue;
     const files = readdirSync(dir).filter((f) => f.endsWith('.yaml'));
+    const source = getSourceLabel(dir);
+
     for (const file of files) {
       const name = basename(file, '.yaml');
       if (seen.has(name)) continue;
@@ -53,10 +76,10 @@ export function listPresets(): Array<{ name: string; description?: string; sourc
         presets.push({
           name,
           description: parsed.description ?? parsed.name ?? name,
-          source: dir.includes('.agora') ? 'user' : 'builtin',
+          source,
         });
       } catch {
-        presets.push({ name, source: dir.includes('.agora') ? 'user' : 'builtin' });
+        presets.push({ name, source });
       }
     }
   }

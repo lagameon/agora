@@ -4,16 +4,20 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { ChatProvider, ChatMessage, ChatOptions, ProviderFactory } from './types.js';
 import { withRetry } from './retry.js';
 
-function requireKey(name: string): string {
-  const key = process.env[name];
-  if (!key) throw new Error(`${name} environment variable not set. Add it to .env or export it.`);
-  return key;
+/** Look up an env var by primary name, with optional fallback names. */
+function requireKey(name: string, ...fallbacks: string[]): string {
+  const names = [name, ...fallbacks];
+  for (const n of names) {
+    const val = process.env[n];
+    if (val) return val;
+  }
+  throw new Error(`${names.join(' or ')} environment variable not set. Add it to .env or export it.`);
 }
 
 // --- OpenAI Factory ---
 
 function openaiFactory(model: string): ChatProvider {
-  const client = new OpenAI({ apiKey: requireKey('OPENAI_API_KEY') });
+  const client = new OpenAI({ apiKey: requireKey('OPENAI_API_KEY', 'OPENAI_KEY') });
 
   return {
     async chat(messages: ChatMessage[], options?: ChatOptions): Promise<string> {
@@ -48,7 +52,9 @@ function openaiFactory(model: string): ChatProvider {
 // --- Anthropic Factory ---
 
 function anthropicFactory(model: string): ChatProvider {
-  const client = new Anthropic({ apiKey: requireKey('ANTHROPIC_API_KEY') });
+  const client = new Anthropic({
+    apiKey: requireKey('ANTHROPIC_API_KEY', 'oANTHROPIC_API_KEY'),
+  });
 
   function toAnthropicMessages(messages: ChatMessage[]) {
     const system = messages.find((m) => m.role === 'system');
@@ -216,7 +222,7 @@ function ollamaFactory(model: string): ChatProvider {
 function xaiFactory(model: string): ChatProvider {
   const client = new OpenAI({
     baseURL: 'https://api.x.ai/v1',
-    apiKey: requireKey('XAI_API_KEY'),
+    apiKey: requireKey('XAI_API_KEY', 'XAI_KEY'),
   });
 
   return {

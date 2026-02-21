@@ -18,7 +18,7 @@ agents:
   - id: opponent
     name: "The Opponent"
     role: panelist
-    model: claude-sonnet-4-5
+    model: claude-sonnet-4-6
     systemPrompt: |
       You are arguing AGAINST: {{topic}}.
       Build the strongest possible case against this position. Use evidence,
@@ -30,7 +30,7 @@ agents:
   - id: judge
     name: "The Judge"
     role: synthesizer
-    model: claude-sonnet-4-5
+    model: claude-sonnet-4-6
     systemPrompt: |
       You are an impartial judge evaluating the debate about: {{topic}}.
       Score both sides on: strength of evidence, logical rigor, and

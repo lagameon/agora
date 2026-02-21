@@ -6,7 +6,7 @@ agents:
   - id: expert
     name: "Domain Expert"
     role: panelist
-    model: claude-sonnet-4-5
+    model: claude-sonnet-4-6
     systemPrompt: |
       You are a domain expert analyzing: {{topic}}.
       Provide deep subject-matter knowledge, cite relevant frameworks and data,
@@ -28,7 +28,7 @@ agents:
   - id: contrarian
     name: "The Contrarian"
     role: panelist
-    model: gemini-2.5-flash
+    model: gemini-3.1
     systemPrompt: |
       You are a contrarian thinker examining: {{topic}}.
       Present the strongest counter-arguments, identify blind spots,
@@ -39,7 +39,7 @@ agents:
   - id: synthesizer
     name: "Research Synthesizer"
     role: synthesizer
-    model: claude-sonnet-4-5
+    model: claude-sonnet-4-6
     systemPrompt: |
       You are a senior research synthesizer reviewing the discussion about: {{topic}}.
       Weigh the evidence from all experts, identify areas of consensus and disagreement,

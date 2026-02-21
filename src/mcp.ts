@@ -4,12 +4,15 @@ import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mc
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { runRoundtable } from './roundtable/engine.js';
-import { loadPreset, listPresets, interpolateConfig } from './config/loader.js';
+import { loadPreset, listPresets, interpolateConfig, loadProjectConfig } from './config/loader.js';
 import { DEFAULT_PRESET } from './agents/presets.js';
 import { getProvider } from './providers/router.js';
 import { DiscussionRecorder, listDiscussions, getDiscussion } from './history/store.js';
 import { DEFAULT_MODEL } from './config/defaults.js';
 import type { RoundtableConfig } from './config/schema.js';
+
+const projectConfig = loadProjectConfig();
+const effectiveDefaultModel = projectConfig.defaultModel ?? DEFAULT_MODEL;
 
 const server = new McpServer({
   name: 'agora',
@@ -29,10 +32,11 @@ server.tool(
   async ({ topic, preset, maxRounds }) => {
     let config: RoundtableConfig;
     let presetWarning = '';
+    const presetName = preset ?? projectConfig.defaultPreset;
     try {
-      config = preset ? loadPreset(preset) : loadPreset('default');
+      config = presetName ? loadPreset(presetName) : loadPreset('default');
     } catch (err) {
-      presetWarning = `Warning: preset "${preset ?? 'default'}" not found, using built-in default.\n\n`;
+      presetWarning = `Warning: preset "${presetName ?? 'default'}" not found, using built-in default.\n\n`;
       config = { ...DEFAULT_PRESET };
     }
     config = interpolateConfig(config, topic);
@@ -68,13 +72,57 @@ server.tool(
 
 server.tool(
   'agora_ask',
-  'Quick single-model query without roundtable discussion. Useful for simple questions.',
+  'Quick single-model query or talk to a specific agent from the current preset. Use the agent parameter to leverage a preset agent\'s expertise (model + system prompt).',
   {
     question: z.string().describe('The question to ask'),
-    model: z.string().optional().describe(`Model to use (default: ${DEFAULT_MODEL}). Examples: gpt-4.1-mini, claude-sonnet-4-5, gemini-2.5-flash`),
+    model: z.string().optional().describe(`Model to use (default: ${effectiveDefaultModel}). Ignored if agent is specified.`),
+    agent: z.string().optional().describe('Agent ID from the current preset (e.g. "quant", "risk-mgr"). Uses the agent\'s model and system prompt.'),
+    preset: z.string().optional().describe('Preset to load agents from (default: project default)'),
   },
-  async ({ question, model }) => {
-    const provider = getProvider(model ?? DEFAULT_MODEL);
+  async ({ question, model, agent, preset }) => {
+    if (agent) {
+      // Agent mode: load preset and find agent
+      const presetName = preset ?? projectConfig.defaultPreset ?? 'default';
+      let config: RoundtableConfig;
+      try {
+        config = loadPreset(presetName);
+      } catch {
+        config = { ...DEFAULT_PRESET };
+      }
+
+      const agentDef = config.agents.find((a) => a.id === agent);
+      if (!agentDef) {
+        const available = config.agents.map((a) => `${a.id} (${a.name})`).join(', ');
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Agent "${agent}" not found in preset "${presetName}". Available: ${available}`,
+          }],
+        };
+      }
+
+      const agentModel = model ?? agentDef.model;
+      const provider = getProvider(agentModel);
+      const systemPrompt = agentDef.systemPrompt.replace(/\{\{topic\}\}/g, question);
+
+      const answer = await provider.chat(
+        [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: question },
+        ],
+        { temperature: agentDef.temperature ?? 0.7, maxTokens: agentDef.maxTokens ?? 2048 },
+      );
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `**${agentDef.name}** (${agentModel}):\n\n${answer}`,
+        }],
+      };
+    }
+
+    // Plain model mode
+    const provider = getProvider(model ?? effectiveDefaultModel);
     const answer = await provider.chat(
       [{ role: 'user', content: question }],
       { temperature: 0.7, maxTokens: 2048 },

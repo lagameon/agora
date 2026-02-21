@@ -5,5 +5,6 @@ export type { AgentDefinition, AgentRole, RoundtableConfig } from './config/sche
 export { AgentDefinitionSchema, RoundtableConfigSchema } from './config/schema.js';
 export { runRoundtable } from './roundtable/engine.js';
 export type { RoundtableEvent, TranscriptEntry, DiscussionStats } from './roundtable/types.js';
-export { loadPreset, listPresets, interpolateConfig } from './config/loader.js';
+export { loadPreset, listPresets, interpolateConfig, loadProjectConfig } from './config/loader.js';
+export type { ProjectConfig } from './config/loader.js';
 export { DiscussionRecorder, listDiscussions, getDiscussion } from './history/store.js';

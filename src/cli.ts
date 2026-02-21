@@ -2,7 +2,7 @@
 
 import { getProvider, listProviders } from './providers/router.js';
 import { DEFAULT_MODEL } from './config/defaults.js';
-import { loadPreset, listPresets, interpolateConfig } from './config/loader.js';
+import { loadPreset, listPresets, interpolateConfig, loadProjectConfig } from './config/loader.js';
 import { DEFAULT_PRESET } from './agents/presets.js';
 import { runRoundtable } from './roundtable/engine.js';
 import { renderToTerminal } from './output/terminal.js';
@@ -10,18 +10,22 @@ import { DiscussionRecorder, listDiscussions, getDiscussion } from './history/st
 import type { RoundtableConfig } from './config/schema.js';
 import type { RoundtableEvent } from './roundtable/types.js';
 
+const projectConfig = loadProjectConfig();
+const effectiveDefaultModel = projectConfig.defaultModel ?? DEFAULT_MODEL;
+
 const USAGE = `
 agora — Multi-agent roundtable discussion tool
 
 Usage:
-  agora ask <question> [--model <model>]     Quick single-model query
-  agora discuss <topic> [options]             Run a roundtable discussion
-  agora presets                               List available presets
-  agora history [--id <id>]                   View discussion history
-  agora mcp                                   Start MCP server (stdio)
+  agora ask <question> [options]             Quick query (single model or agent)
+  agora discuss <topic> [options]            Run a roundtable discussion
+  agora presets                              List available presets
+  agora history [--id <id>]                  View discussion history
+  agora mcp                                  Start MCP server (stdio)
 
 Options:
-  --model <model>    Model to use (default: ${DEFAULT_MODEL})
+  --model <model>    Model to use (default: ${effectiveDefaultModel})
+  --agent <id>       Talk to a specific agent from the current preset
   --preset <name>    Preset name (default, research, debate)
   --rounds <n>       Maximum discussion rounds (default: 2)
   --help, -h         Show this help message
@@ -56,31 +60,82 @@ function parseArgs(args: string[]): { command: string; positional: string; flags
   return { command, positional: positional.join(' '), flags };
 }
 
-async function handleAsk(question: string, model: string): Promise<void> {
+/**
+ * Resolve the current preset config (for --agent lookups).
+ */
+function resolveCurrentPreset(presetName?: string): RoundtableConfig {
+  const name = presetName ?? projectConfig.defaultPreset ?? 'default';
+  try {
+    return loadPreset(name);
+  } catch {
+    return { ...DEFAULT_PRESET };
+  }
+}
+
+/**
+ * Handle `ask` command — plain model query or agent-specific query.
+ */
+async function handleAsk(
+  question: string,
+  flags: Record<string, string>,
+): Promise<void> {
   if (!question) {
     console.error('Error: question is required. Usage: agora ask "your question"');
     process.exit(1);
   }
 
-  const provider = getProvider(model);
-  console.log(`\x1b[2m[${model}]\x1b[0m\n`);
+  const agentId = flags['agent'];
 
-  for await (const chunk of provider.stream(
-    [{ role: 'user', content: question }],
-    { temperature: 0.7, maxTokens: 2048 },
-  )) {
-    process.stdout.write(chunk);
+  if (agentId) {
+    // --- Agent mode: use model + systemPrompt from preset ---
+    const preset = resolveCurrentPreset(flags['preset']);
+    const agent = preset.agents.find((a) => a.id === agentId);
+    if (!agent) {
+      const available = preset.agents.map((a) => `  ${a.id} — ${a.name} (${a.model})`).join('\n');
+      console.error(`Error: agent "${agentId}" not found in preset.\n\nAvailable agents:\n${available}`);
+      process.exit(1);
+    }
+
+    const model = flags['model'] ?? agent.model;
+    const provider = getProvider(model);
+    console.log(`\x1b[36m[${agent.name}]\x1b[0m \x1b[2m(${model})\x1b[0m\n`);
+
+    const messages = [
+      { role: 'system' as const, content: agent.systemPrompt.replace(/\{\{topic\}\}/g, question) },
+      { role: 'user' as const, content: question },
+    ];
+
+    for await (const chunk of provider.stream(messages, {
+      temperature: agent.temperature ?? 0.7,
+      maxTokens: agent.maxTokens ?? 2048,
+    })) {
+      process.stdout.write(chunk);
+    }
+    console.log('\n');
+  } else {
+    // --- Plain model mode ---
+    const model = flags['model'] ?? effectiveDefaultModel;
+    const provider = getProvider(model);
+    console.log(`\x1b[2m[${model}]\x1b[0m\n`);
+
+    for await (const chunk of provider.stream(
+      [{ role: 'user', content: question }],
+      { temperature: 0.7, maxTokens: 2048 },
+    )) {
+      process.stdout.write(chunk);
+    }
+    console.log('\n');
   }
-  console.log('\n');
 }
 
 function resolveConfig(presetName: string | undefined, topic: string): RoundtableConfig {
   let config: RoundtableConfig;
-  if (presetName) {
+  const name = presetName ?? projectConfig.defaultPreset;
+  if (name) {
     try {
-      config = loadPreset(presetName);
+      config = loadPreset(name);
     } catch {
-      console.error(`Warning: preset "${presetName}" not found, using built-in default.`);
+      console.error(`Warning: preset "${name}" not found, using built-in default.`);
       config = { ...DEFAULT_PRESET };
     }
   } else {
@@ -116,8 +171,7 @@ async function main(): Promise<void> {
 
   switch (command) {
     case 'ask': {
-      const model = flags['model'] ?? DEFAULT_MODEL;
-      await handleAsk(positional, model);
+      await handleAsk(positional, flags);
       break;
     }
 

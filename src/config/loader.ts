@@ -3,6 +3,50 @@ import { join, basename } from 'path';
 import YAML from 'yaml';
 import { RoundtableConfigSchema, type RoundtableConfig } from './schema.js';
 
+/** Project-level config from .agora/config.yaml */
+export interface ProjectConfig {
+  defaultModel?: string;
+  defaultPreset?: string;
+}
+
+/**
+ * Load project-level config from .agora/config.yaml (cwd), then ~/.agora/config.yaml.
+ * Project-local overrides user-global.
+ */
+export function loadProjectConfig(): ProjectConfig {
+  const candidates: string[] = [];
+
+  // Project-local (highest priority)
+  candidates.push(join(process.cwd(), '.agora', 'config.yaml'));
+
+  // User global
+  const home = process.env.HOME ?? process.env.USERPROFILE ?? '';
+  if (home) {
+    candidates.push(join(home, '.agora', 'config.yaml'));
+  }
+
+  const merged: ProjectConfig = {};
+
+  // Read in reverse so project-local overwrites user-global
+  for (const filePath of [...candidates].reverse()) {
+    if (!existsSync(filePath)) continue;
+    try {
+      const raw = readFileSync(filePath, 'utf-8');
+      const parsed = YAML.parse(raw) as Record<string, unknown>;
+      if (parsed.defaultModel && typeof parsed.defaultModel === 'string') {
+        merged.defaultModel = parsed.defaultModel;
+      }
+      if (parsed.defaultPreset && typeof parsed.defaultPreset === 'string') {
+        merged.defaultPreset = parsed.defaultPreset;
+      }
+    } catch {
+      // Ignore malformed config
+    }
+  }
+
+  return merged;
+}
+
 /**
  * Directories to search for presets, in priority order (highest first):
  * 1. Project-local: ./.agora/presets/  (cwd)

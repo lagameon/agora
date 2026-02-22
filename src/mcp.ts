@@ -44,26 +44,55 @@ server.tool(
 
     const recorder = new DiscussionRecorder(topic, preset);
     const transcript: string[] = [];
+    const errors: string[] = [];
     let finalAnswer = '';
 
-    for await (const event of runRoundtable(topic, config)) {
-      recorder.handleEvent(event);
+    try {
+      for await (const event of runRoundtable(topic, config)) {
+        recorder.handleEvent(event);
 
-      if (event.type === 'agent_done') {
-        transcript.push(`**${event.agentName}** (${event.model}, Round ${event.round}):\n${event.fullResponse}`);
+        if (event.type === 'agent_done') {
+          transcript.push(`**${event.agentName}** (${event.model}, Round ${event.round}):\n${event.fullResponse}`);
+        }
+        if (event.type === 'synthesis_done') {
+          finalAnswer = event.answer;
+        }
+        if (event.type === 'error') {
+          const who = event.agentId ? `[${event.agentId}] ` : '';
+          errors.push(`${who}${event.error}`);
+        }
       }
-      if (event.type === 'synthesis_done') {
-        finalAnswer = event.answer;
-      }
+    } catch (err) {
+      errors.push(`Engine crash: ${err instanceof Error ? err.message : String(err)}`);
     }
 
     const discussionId = recorder.discussionId;
+
+    // Build response sections
+    const sections: string[] = [];
+    sections.push(`${presetWarning}## Roundtable Discussion: "${topic}"`);
+
+    if (errors.length > 0) {
+      sections.push(`### ⚠️ Errors\n\n${errors.map((e) => `- ${e}`).join('\n')}`);
+    }
+
+    if (transcript.length > 0) {
+      sections.push(`### Transcript\n\n${transcript.join('\n\n---\n\n')}`);
+    }
+
+    if (finalAnswer) {
+      sections.push(`### Synthesis\n\n${finalAnswer}`);
+    } else if (transcript.length === 0 && errors.length > 0) {
+      sections.push(`### Result\n\nNo responses collected. All agents failed — check API keys and model IDs.\n\nModels used in preset: ${config.agents.map((a) => `${a.name} (${a.model})`).join(', ')}`);
+    }
+
+    sections.push(`_Discussion ID: ${discussionId} | View details: agora history --id ${discussionId}_`);
 
     return {
       content: [
         {
           type: 'text' as const,
-          text: `${presetWarning}## Roundtable Discussion: "${topic}"\n\n### Transcript\n\n${transcript.join('\n\n---\n\n')}\n\n---\n\n### Synthesis\n\n${finalAnswer}\n\n---\n_Discussion ID: ${discussionId} | View details: agora history --id ${discussionId}_`,
+          text: sections.join('\n\n---\n\n'),
         },
       ],
     };

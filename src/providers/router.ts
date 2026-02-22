@@ -21,14 +21,24 @@ function usesCompletionTokens(model: string): boolean {
   return model.startsWith('gpt-5') || model.startsWith('o1') || model.startsWith('o3') || model.startsWith('o4');
 }
 
+/** Models that only accept temperature=1 (no custom temperature) */
+function isFixedTemperature(model: string): boolean {
+  return model === 'gpt-5-mini' || model.startsWith('o1') || model.startsWith('o3');
+}
+
 function openaiFactory(model: string): ChatProvider {
   const client = new OpenAI({ apiKey: requireKey('OPENAI_API_KEY', 'OPENAI_KEY') });
   const useCompletionTokens = usesCompletionTokens(model);
+  const fixedTemp = isFixedTemperature(model);
 
   function tokenParam(maxTokens: number): Record<string, number> {
     return useCompletionTokens
       ? { max_completion_tokens: maxTokens }
       : { max_tokens: maxTokens };
+  }
+
+  function tempParam(temperature?: number): Record<string, number> {
+    return fixedTemp ? {} : { temperature: temperature ?? 0.7 };
   }
 
   return {
@@ -37,7 +47,7 @@ function openaiFactory(model: string): ChatProvider {
         const res = await client.chat.completions.create({
           model,
           messages: messages.map((m) => ({ role: m.role, content: m.content })),
-          temperature: options?.temperature ?? 0.7,
+          ...tempParam(options?.temperature),
           ...tokenParam(options?.maxTokens ?? 1024),
         });
         return res.choices[0]?.message?.content ?? '';
@@ -48,7 +58,7 @@ function openaiFactory(model: string): ChatProvider {
       const stream = await client.chat.completions.create({
         model,
         messages: messages.map((m) => ({ role: m.role, content: m.content })),
-        temperature: options?.temperature ?? 0.7,
+        ...tempParam(options?.temperature),
         ...tokenParam(options?.maxTokens ?? 1024),
         stream: true,
       });

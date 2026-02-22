@@ -28,7 +28,7 @@ agents:
   - id: contrarian
     name: "The Contrarian"
     role: panelist
-    model: gemini-3.1
+    model: gemini-2.5-flash
     systemPrompt: |
       You are a contrarian thinker examining: {{topic}}.
       Present the strongest counter-arguments, identify blind spots,

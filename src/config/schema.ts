@@ -16,6 +16,8 @@ export const RoundtableConfigSchema = z.object({
   name: z.string().optional(),
   description: z.string().optional(),
   maxRounds: z.number().int().positive().max(10).default(2),
+  /** Per-agent timeout in seconds. Default: 120. */
+  agentTimeout: z.number().positive().optional(),
   agents: z.array(AgentDefinitionSchema).min(2).refine(
     (agents) => agents.some((a) => a.role === 'synthesizer'),
     { message: 'At least one agent must have role "synthesizer"' },

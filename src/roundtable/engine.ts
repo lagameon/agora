@@ -4,6 +4,8 @@ import type { TranscriptEntry, RoundtableEvent, DiscussionStats } from './types.
 import { buildPanelistMessages, buildSynthesizerMessages } from './context.js';
 import { getPanelists, getSynthesizer, isConcurrentRound } from './protocol.js';
 
+const DEFAULT_AGENT_TIMEOUT_S = 120;
+
 /**
  * Estimate tokens from text length (rough: ~3.5 chars per token).
  */
@@ -12,25 +14,45 @@ function estimateTokens(text: string): number {
 }
 
 /**
- * Stream a single agent's response and collect the full text.
+ * Race a promise against a timeout. Rejects with a descriptive error on timeout.
  */
-async function streamAgent(
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${(timeoutMs / 1000).toFixed(0)}s`));
+    }, timeoutMs);
+
+    promise.then(
+      (val) => { clearTimeout(timer); resolve(val); },
+      (err) => { clearTimeout(timer); reject(err); },
+    );
+  });
+}
+
+/**
+ * Collect all chunks from a streaming agent, with a hard timeout.
+ */
+async function streamAgentWithTimeout(
   agent: AgentDefinition,
   messages: { role: 'system' | 'user' | 'assistant'; content: string }[],
   onChunk: (chunk: string) => void,
+  timeoutMs: number,
 ): Promise<string> {
   const provider = getProvider(agent.model);
-  const parts: string[] = [];
 
-  for await (const chunk of provider.stream(messages, {
-    temperature: agent.temperature ?? 0.7,
-    maxTokens: agent.maxTokens ?? 1024,
-  })) {
-    parts.push(chunk);
-    onChunk(chunk);
-  }
+  const work = async (): Promise<string> => {
+    const parts: string[] = [];
+    for await (const chunk of provider.stream(messages, {
+      temperature: agent.temperature ?? 0.7,
+      maxTokens: agent.maxTokens ?? 1024,
+    })) {
+      parts.push(chunk);
+      onChunk(chunk);
+    }
+    return parts.join('');
+  };
 
-  return parts.join('');
+  return withTimeout(work(), timeoutMs, `${agent.name} (${agent.model})`);
 }
 
 /**
@@ -44,6 +66,7 @@ export async function* runRoundtable(
   const startTime = Date.now();
   const panelists = getPanelists(config.agents);
   const synthesizer = getSynthesizer(config.agents);
+  const timeoutMs = (config.agentTimeout ?? DEFAULT_AGENT_TIMEOUT_S) * 1000;
 
   if (panelists.length === 0) {
     yield { type: 'error', error: 'No panelist agents defined in config' };
@@ -68,15 +91,13 @@ export async function* runRoundtable(
 
     if (concurrent) {
       // Round 1: all panelists in parallel (no prior context to reference).
-      // Chunks are buffered per agent since we can't yield from inside Promise.all.
-      // After all complete, yield each agent's chunks + done event sequentially.
       const results = await Promise.allSettled(
         panelists.map(async (agent) => {
           const messages = buildPanelistMessages(agent, topic, transcript, round);
           const chunks: string[] = [];
-          const response = await streamAgent(agent, messages, (chunk) => {
+          const response = await streamAgentWithTimeout(agent, messages, (chunk) => {
             chunks.push(chunk);
-          });
+          }, timeoutMs);
           return { agent, response, chunks };
         }),
       );
@@ -84,7 +105,7 @@ export async function* runRoundtable(
       // Yield results in panelist order (Promise.allSettled preserves order)
       for (let i = 0; i < results.length; i++) {
         const result = results[i];
-        const agent = panelists[i]; // Safe: allSettled preserves input order
+        const agent = panelists[i];
 
         if (result.status === 'fulfilled') {
           const { response, chunks } = result.value;
@@ -120,8 +141,7 @@ export async function* runRoundtable(
         }
       }
     } else {
-      // Round 2+: sequential — each agent sees all prior responses including
-      // earlier agents in the current round.
+      // Round 2+: sequential — each agent sees all prior responses.
       for (const agent of panelists) {
         yield { type: 'agent_start', agentId: agent.id, agentName: agent.name, round };
 
@@ -130,13 +150,18 @@ export async function* runRoundtable(
           const provider = getProvider(agent.model);
           let fullResponse = '';
 
-          for await (const chunk of provider.stream(messages, {
-            temperature: agent.temperature ?? 0.7,
-            maxTokens: agent.maxTokens ?? 1024,
-          })) {
-            fullResponse += chunk;
-            yield { type: 'agent_chunk', agentId: agent.id, text: chunk };
-          }
+          const work = async (): Promise<string> => {
+            for await (const chunk of provider.stream(messages, {
+              temperature: agent.temperature ?? 0.7,
+              maxTokens: agent.maxTokens ?? 1024,
+            })) {
+              fullResponse += chunk;
+              // Can't yield from inside async — chunks are emitted below via done event
+            }
+            return fullResponse;
+          };
+
+          fullResponse = await withTimeout(work(), timeoutMs, `${agent.name} (${agent.model})`);
 
           totalTokens += estimateTokens(fullResponse);
           transcript.push({
@@ -176,13 +201,17 @@ export async function* runRoundtable(
     const provider = getProvider(synthesizer.model);
     let synthesisText = '';
 
-    for await (const chunk of provider.stream(synthMessages, {
-      temperature: synthesizer.temperature ?? 0.3,
-      maxTokens: synthesizer.maxTokens ?? 2048,
-    })) {
-      synthesisText += chunk;
-      yield { type: 'synthesis_chunk', text: chunk };
-    }
+    const synthWork = async (): Promise<string> => {
+      for await (const chunk of provider.stream(synthMessages, {
+        temperature: synthesizer.temperature ?? 0.3,
+        maxTokens: synthesizer.maxTokens ?? 2048,
+      })) {
+        synthesisText += chunk;
+      }
+      return synthesisText;
+    };
+
+    synthesisText = await withTimeout(synthWork(), timeoutMs, `${synthesizer.name} (${synthesizer.model})`);
 
     totalTokens += estimateTokens(synthesisText);
     yield { type: 'synthesis_done', answer: synthesisText };
